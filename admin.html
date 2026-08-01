@@ -244,6 +244,19 @@
         <button class="btn" id="ap-toggle" onclick="toggleAutoPrint()"><i class="ti ti-player-play"></i> Auto-print: OFF</button>
         <button class="btn btn-primary" onclick="printAllPending()"><i class="ti ti-printer"></i> Print all pending</button>
       </div>
+      <div class="sep"></div>
+      <div class="lbl"><i class="ti ti-device-mobile"></i> Niimbot / app-based sticker printers</div>
+      <div class="note">These printers can't be reached by the browser directly. Instead: use <b>PNG</b> on any label below to share the image straight to the NIIMBOT app (choose it in your phone's share sheet, then print) — or use <b>Export for Niimbot</b> to download a spreadsheet for the app's Excel batch-print feature.</div>
+      <div class="toolbar" style="margin-bottom:12px">
+        <select id="pq-size" onchange="saveLabelSize()" style="padding:11px 12px;border:3px solid var(--teal-light);border-radius:14px;font-family:'Fredoka';font-size:13px;font-weight:600;color:var(--teal-dark);background:#fff">
+          <option value="50x30">Label 50 × 30 mm</option>
+          <option value="40x30">Label 40 × 30 mm</option>
+          <option value="62x29">Label 62 × 29 mm</option>
+          <option value="30x20">Label 30 × 20 mm (small)</option>
+        </select>
+        <button class="btn" onclick="exportNiimbot()"><i class="ti ti-file-spreadsheet"></i> Export for Niimbot</button>
+        <button class="btn" onclick="markAllPrinted()"><i class="ti ti-checks"></i> Mark all printed</button>
+      </div>
       <div class="recip-head"><span class="recip-count" id="pq-count">0 labels pending</span>
         <button class="mini" onclick="refresh()">Refresh</button></div>
       <div class="rec-list" id="pq-list"></div>
@@ -672,10 +685,101 @@
         +'<img alt="QR" style="width:52px;height:52px;flex-shrink:0" src="'+qrDataUrl(tagUrl(c),104)+'"/></div>'
         +'<div class="rec-actions">'
         +'<button class="ib pick" onclick="printOne(\''+c.id+'\')"><i class="ti ti-printer"></i> Print</button>'
+        +'<button class="ib" onclick="shareLabelPng(\''+c.id+'\')"><i class="ti ti-photo-share"></i> PNG</button>'
         +'<button class="ib" onclick="markPrinted([\''+c.id+'\'])"><i class="ti ti-check"></i> Mark done</button>'
         +'</div></div>';
     }).join('');
     updateApButton();
+  }
+  /* ---------- NIIMBOT / APP-PRINTER SUPPORT ---------- */
+  var LABEL_SIZES={'50x30':{w:50,h:30},'40x30':{w:40,h:30},'62x29':{w:62,h:29},'30x20':{w:30,h:20}};
+  function getLabelSize(){
+    var v=localStorage.getItem('kc_labelsize')||'50x30';
+    if(!LABEL_SIZES[v])v='50x30';
+    return LABEL_SIZES[v];
+  }
+  function saveLabelSize(){
+    var sel=document.getElementById('pq-size');
+    if(sel&&LABEL_SIZES[sel.value])localStorage.setItem('kc_labelsize',sel.value);
+  }
+  function initLabelSize(){
+    var sel=document.getElementById('pq-size');
+    if(sel)sel.value=localStorage.getItem('kc_labelsize')||'50x30';
+  }
+  function labelPng(rec,cb){
+    var sz=getLabelSize();
+    var PX=16; // px per mm for a crisp print image
+    var W=sz.w*PX,H=sz.h*PX;
+    var cv=document.createElement('canvas');cv.width=W;cv.height=H;
+    var ctx=cv.getContext('2d');
+    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
+    var pad=1.5*PX;
+    var qrSide=Math.min(H-2*pad, W*0.45);
+    var textW=W-qrSide-3*pad;
+    var first=rec.kid.split(' ')[0];
+    // fit the name into textW
+    var fs=Math.min((sz.h*0.5)*PX, textW/(Math.max(first.length,1)*0.55));
+    ctx.fillStyle='#000000';
+    ctx.font='800 '+Math.floor(fs)+'px Arial';
+    ctx.textBaseline='alphabetic';
+    // shrink further if measure exceeds
+    while(ctx.measureText(first).width>textW && fs>10){
+      fs-=2;ctx.font='800 '+Math.floor(fs)+'px Arial';
+    }
+    var nameY=H*0.5;
+    // draw with slight letter spacing
+    var ls=fs*0.06,x=pad;
+    for(var i=0;i<first.length;i++){
+      ctx.fillText(first[i],x,nameY);
+      x+=ctx.measureText(first[i]).width+ls;
+    }
+    var phoneFs=Math.max(10,3*PX*0.9);
+    ctx.font='700 '+Math.floor(phoneFs)+'px Arial';
+    ctx.fillText(rec.phone||'',pad,nameY+phoneFs*1.5);
+    var img=new Image();
+    img.onload=function(){
+      ctx.drawImage(img,W-qrSide-pad,(H-qrSide)/2,qrSide,qrSide);
+      cb(cv);
+    };
+    img.onerror=function(){cb(cv);};
+    img.src=qrDataUrl(tagUrl(rec),400);
+  }
+  function shareLabelPng(id){
+    var c=checkins.find(function(x){return String(x.id)===String(id);});
+    if(!c){toast('Label not found',true);return;}
+    labelPng(c,function(cv){
+      cv.toBlob(function(blob){
+        if(!blob){toast('Could not build image',true);return;}
+        var first=c.kid.split(' ')[0];
+        var file=new File([blob],'label-'+first.toLowerCase()+'.png',{type:'image/png'});
+        if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
+          navigator.share({files:[file],title:'NXT GEN label'}).catch(function(){});
+        }else{
+          var a=document.createElement('a');
+          a.download=file.name;a.href=cv.toDataURL('image/png');a.click();
+          toast('Image saved \u2014 open it in the NIIMBOT app to print');
+        }
+      },'image/png');
+    });
+  }
+  function exportNiimbot(){
+    var pend=checkins.filter(function(c){return !c.printed;});
+    if(!pend.length){toast('No pending labels to export',true);return;}
+    var wb=XLSX.utils.book_new();
+    var rows=[['Name','Phone','QR']];
+    pend.forEach(function(c){rows.push([c.kid.split(' ')[0],c.phone||'',tagUrl(c)]);});
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:16},{wch:18},{wch:60}];
+    XLSX.utils.book_append_sheet(wb,ws,'Labels');
+    XLSX.writeFile(wb,'NIIMBOT_labels_'+nowDate().replace(/\//g,'-')+'.xlsx');
+    toast('Exported '+pend.length+' labels \u2014 import in the NIIMBOT app');
+  }
+  function markAllPrinted(){
+    var pend=checkins.filter(function(c){return !c.printed;});
+    if(!pend.length){toast('Nothing pending',true);return;}
+    if(!confirm('Mark all '+pend.length+' pending labels as printed?'))return;
+    markPrinted(pend.map(function(c){return c.id;}));
+    toast('All marked as printed');
   }
   // background watcher: pull fresh data and auto-print new arrivals
   setInterval(function(){
@@ -693,7 +797,7 @@
   if(LIVE){mt.className='mode-tag mode-live';mt.innerHTML='<i class="ti ti-cloud-check"></i> Live';}
   else{mt.className='mode-tag mode-demo';mt.innerHTML='<i class="ti ti-flask"></i> Demo';}
   if(document.fonts&&document.fonts.ready){document.fonts.ready.then(drawPoster);}
-  updateApButton();refresh();drawPoster();
+  initLabelSize();updateApButton();refresh();drawPoster();
 </script>
 </body>
 </html>
