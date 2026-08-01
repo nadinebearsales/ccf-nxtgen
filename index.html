@@ -425,7 +425,7 @@
   }
   function tagUrl(r){
     if(location.protocol==='file:')return qrText(r);
-    return location.origin+location.pathname+'?tag='+encTag(r);
+    return location.origin+location.pathname+'?t='+r.id;
   }
   function qrText(r){
     return 'NXT GEN KIDS'
@@ -436,7 +436,7 @@
   }
   function qrDataUrl(text,size){
     var d=document.createElement('div');
-    new QRCode(d,{text:text,width:size,height:size,correctLevel:QRCode.CorrectLevel.L});
+    new QRCode(d,{text:text,width:size,height:size,correctLevel:QRCode.CorrectLevel.M});
     var cv=d.querySelector('canvas');
     return cv?cv.toDataURL('image/png'):(d.querySelector('img')||{}).src||'';
   }
@@ -465,10 +465,10 @@
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
       +'@page{size:62mm 29mm;margin:0}*{margin:0;padding:0;box-sizing:border-box}'
       +'.pg{width:62mm;height:29mm;page-break-after:always;display:flex}'
-      +'.lab{width:100%;display:flex;align-items:center;padding:2mm 3mm;gap:2mm;font-family:Arial,sans-serif}'
+      +'.lab{width:100%;display:flex;align-items:center;padding:1.5mm 2.5mm;gap:1.5mm;font-family:Arial,sans-serif}'
       +'.tx{flex:1;min-width:0}.nm{font-weight:800;line-height:1;white-space:nowrap;overflow:hidden;color:#000;letter-spacing:0.06em}'
       +'.mt{font-size:3mm;font-weight:700;color:#000;margin-top:1.8mm;letter-spacing:.3mm}'
-      +'img{width:23mm;height:23mm;flex-shrink:0}'
+      +'img{width:25mm;height:25mm;flex-shrink:0}'
       +'</style></head><body>'+body+'</body></html>';
   }
   function printLabel(){
@@ -528,27 +528,53 @@
       alert('Sorry, that didn\u2019t save. Please check your connection and try again.');
     });
   }
-  function showTagView(){
-    var q=new URLSearchParams(location.search).get('tag');
-    if(!q)return false;
-    var o=decTag(q);
-    if(!o)return false;
+  function populateTagView(o){
     tagRec=o;
-    document.getElementById('greeting').style.display='none';
-    document.getElementById('form-area').style.display='none';
-    document.getElementById('success-wrap').style.display='none';
-    var tv=document.getElementById('tag-view');
-    tv.style.display='block';
-    var first=(o.k||'').split(' ')[0];
     document.getElementById('tv-kid').textContent=o.k||'';
     document.getElementById('tv-time').textContent=(o.t?'Checked in at '+o.t:'')+(o.d?' \u00b7 '+o.d:'');
     document.getElementById('tv-parent').textContent=o.p||'\u2014';
     document.getElementById('tv-phone').textContent=o.c||'\u2014';
     var tel=(o.c||'').replace(/[^+0-9]/g,'');
     var call=document.getElementById('tv-call'),sms=document.getElementById('tv-sms');
-    if(tel){call.href='tel:'+tel;sms.href='sms:'+tel;}
+    if(tel){call.href='tel:'+tel;sms.href='sms:'+tel;call.style.opacity='1';sms.style.opacity='1';}
     else{call.style.opacity='0.4';call.removeAttribute('href');sms.style.opacity='0.4';sms.removeAttribute('href');}
     document.getElementById('tv-id').textContent=o.i?'Check-in ID: '+o.i:'';
+  }
+  function showTagShell(){
+    document.getElementById('greeting').style.display='none';
+    document.getElementById('form-area').style.display='none';
+    document.getElementById('success-wrap').style.display='none';
+    document.getElementById('tag-view').style.display='block';
+  }
+  function showTagView(){
+    var params=new URLSearchParams(location.search);
+    var shortId=params.get('t');
+    if(shortId){
+      showTagShell();
+      document.getElementById('tv-kid').textContent='Loading\u2026';
+      document.getElementById('tv-parent').textContent='\u2014';
+      document.getElementById('tv-phone').textContent='\u2014';
+      apiGet().then(function(d){
+        var c=(d.checkins||[]).find(function(x){return String(x.id)===String(shortId);});
+        if(!c){
+          document.getElementById('tv-kid').textContent='Tag not found';
+          document.getElementById('tv-time').textContent='This check-in may have been removed.';
+          return;
+        }
+        populateTagView({k:c.kid,p:c.parent,c:c.phone,i:c.id,t:c.dropTime,d:c.date});
+        applyTagStatus(c.pickTime||null);
+      }).catch(function(){
+        document.getElementById('tv-kid').textContent='Connection problem';
+        document.getElementById('tv-time').textContent='Please check your internet and reload.';
+      });
+      return true;
+    }
+    var q=params.get('tag');
+    if(!q)return false;
+    var o=decTag(q);
+    if(!o)return false;
+    showTagShell();
+    populateTagView(o);
     refreshTagStatus();
     return true;
   }

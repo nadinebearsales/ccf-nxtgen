@@ -564,7 +564,7 @@
   }
   function tagUrl(r){
     if(!TAG_LINKS)return qrText(r);
-    return PARENT_URL.split('?')[0]+'?tag='+encTag(r);
+    return PARENT_URL.split('?')[0]+'?t='+r.id;
   }
   function qrText(r){
     return 'NXT GEN KIDS'
@@ -575,7 +575,7 @@
   }
   function qrDataUrl(text,size){
     var d=document.createElement('div');
-    new QRCode(d,{text:text,width:size,height:size,correctLevel:QRCode.CorrectLevel.L});
+    new QRCode(d,{text:text,width:size,height:size,correctLevel:QRCode.CorrectLevel.M});
     var cv=d.querySelector('canvas');
     return cv?cv.toDataURL('image/png'):(d.querySelector('img')||{}).src||'';
   }
@@ -598,10 +598,10 @@
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
       +'@page{size:62mm 29mm;margin:0}*{margin:0;padding:0;box-sizing:border-box}'
       +'.pg{width:62mm;height:29mm;page-break-after:always;display:flex}'
-      +'.lab{width:100%;display:flex;align-items:center;padding:2mm 3mm;gap:2mm;font-family:Arial,sans-serif}'
+      +'.lab{width:100%;display:flex;align-items:center;padding:1.5mm 2.5mm;gap:1.5mm;font-family:Arial,sans-serif}'
       +'.tx{flex:1;min-width:0}.nm{font-weight:800;line-height:1;white-space:nowrap;overflow:hidden;color:#000;letter-spacing:0.06em}'
       +'.mt{font-size:3mm;font-weight:700;color:#000;margin-top:1.8mm;letter-spacing:.3mm}'
-      +'img{width:23mm;height:23mm;flex-shrink:0}'
+      +'img{width:25mm;height:25mm;flex-shrink:0}'
       +'</style></head><body>'+body+'</body></html>';
   }
   function doPrint(recs, done){
