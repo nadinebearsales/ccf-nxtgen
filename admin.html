@@ -1104,17 +1104,26 @@
       labelPng(rec,function(cv){
         (async function(){
           try{
-            var PTV = niimbluelib.PrintTaskVersion;
-            var task = btClient.createPrintTask(
-              PTV ? (PTV.V4 || Object.values(PTV)[0]) : undefined,
-              { totalPages: 1, density: 3, labelType: 1, quantity: 1 }
-            );
-            if(!task) throw new Error('Printer model not recognised by the driver yet.');
-            var encoded = niimbluelib.ImageEncoder.encodeCanvas
-              ? niimbluelib.ImageEncoder.encodeCanvas(cv, 'left')
-              : cv;
+            var taskType = btClient.getPrintTaskType(); // e.g. "B21_V1"
+            var TaskClass = (niimbluelib.printTasks && niimbluelib.printTasks[taskType]) || niimbluelib.B21V1PrintTask;
+            if(!TaskClass) throw new Error('No print task class found for type '+taskType);
+
+            var printerInfo = btClient.getPrinterInfo();
+            var abstraction = new niimbluelib.Abstraction(btClient);
+            var task = new TaskClass(abstraction, {
+              density: 3,
+              labelType: (printerInfo && printerInfo.labelType) || 1,
+              totalPages: 1
+            });
+
+            var encoded = niimbluelib.ImageEncoder.encodeCanvas(cv);
+
             await task.printInit();
             await task.printPage(encoded, 1);
+            if(typeof task.waitForFinished === 'function'){
+              try{ await task.waitForFinished(); }
+              catch(e2){ btLog('waitForFinished warning: '+(e2&&e2.message?e2.message:e2), true); }
+            }
             await task.printEnd();
             resolve();
           }catch(err){ reject(err); }
