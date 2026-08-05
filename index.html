@@ -154,13 +154,13 @@
             </button>
           </div>
           <div id="sc-view">
-            <div class="sc-detail"><span class="sc-lbl">Birthday</span><span class="sc-val" id="sc-bday"></span></div>
+            <div class="sc-detail"><span class="sc-lbl">Nick name</span><span class="sc-val" id="sc-nick"></span></div>
             <div class="sc-detail"><span class="sc-lbl">Parent contact</span><span class="sc-val" id="sc-phone"></span></div>
           </div>
           <div id="sc-edit-form" style="display:none">
             <div class="field"><label>Child's name</label><input type="text" id="ed-kid"/></div>
             <div class="field"><label>Parent / guardian name</label><input type="text" id="ed-parent"/></div>
-            <div class="field"><label>Birthday</label><input type="text" id="ed-bday" placeholder="DD/MM/YYYY"/></div>
+            <div class="field"><label>Nick name (printed on the sticker)</label><input type="text" id="ed-nick" placeholder="e.g. Liv"/></div>
             <div class="field"><label>Parent contact number</label><input type="tel" id="ed-phone"/></div>
             <div style="display:flex;gap:10px;margin-top:4px">
               <button type="button" onclick="exitEditMode()" style="flex:1;padding:12px;border-radius:14px;font-family:'Fredoka';font-size:14px;font-weight:600;background:#fff;color:var(--teal-dark);border:3px solid var(--teal-light);cursor:pointer">Cancel</button>
@@ -201,16 +201,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   /* ====== PASTE YOUR GOOGLE WEB APP URL BELOW (ends with /exec) ====== */
-  var API_URL = "https://script.google.com/macros/s/AKfycbypvzAV66f1g9aunJk4MQT64U3DuezGcgF1n9oA2bl7Kgeb9waxCYkiyhyyZj8jHuPA/exec";
+  var API_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
   /* ====== PASTE YOUR GOOGLE FORM REGISTRATION LINK BELOW (optional) ====== */
-  var REGISTRATION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc7Yo-rZ9whSnOOkjaRoL-iencyXvGQGhv_BIs9F9rzMY_Mqw/viewform";
+  var REGISTRATION_URL = "PASTE_YOUR_REGISTRATION_FORM_URL_HERE";
   /* ====== PASTE YOUR ADMIN PANEL URL BELOW (tap the logo 3x to open it) ====== */
-  var ADMIN_URL = "https://ccf-nxtgen.vercel.app/admin";
+  var ADMIN_URL = "PASTE_YOUR_ADMIN_PANEL_URL_HERE";
   /* ======================================================================= */
   var LIVE = API_URL.indexOf("http") === 0;
 
   var DUMMY=[
-    {parent:"Sarah Thompson",kid:"Olivia Thompson",bday:"15/03/2018",email:"sarah.thompson@email.com",phone:"07700 900123"},
+    {parent:"Sarah Thompson",kid:"Olivia Thompson",nick:"Liv",bday:"",email:"sarah.thompson@email.com",phone:"07700 900123"},
     {parent:"David Nguyen",kid:"Liam Nguyen",bday:"22/07/2016",email:"david.nguyen@email.com",phone:"07700 900456"},
     {parent:"Grace Osei",kid:"Amara Osei",bday:"04/11/2019",email:"grace.osei@email.com",phone:"07700 900789"},
     {parent:"James Walker",kid:"Noah Walker",bday:"30/01/2017",email:"james.walker@email.com",phone:"07700 901012"},
@@ -333,7 +333,7 @@
     document.getElementById('sc-av').textContent=initials(selected.kid);
     document.getElementById('sc-name').textContent=selected.kid;
     document.getElementById('sc-parent').textContent='Parent: '+selected.parent;
-    document.getElementById('sc-bday').textContent=selected.bday||'\u2014';
+    document.getElementById('sc-nick').textContent=selected.nick||'\u2014';
     document.getElementById('sc-phone').textContent=selected.phone||'\u2014';
     document.getElementById('selected-card').style.display='block';
     var already=checkins.find(function(c){return c.kid===selected.kid&&c.date===nowDate()&&!c.pickTime;});
@@ -344,7 +344,7 @@
     if(!selected)return;
     document.getElementById('ed-kid').value=selected.kid||'';
     document.getElementById('ed-parent').value=selected.parent||'';
-    document.getElementById('ed-bday').value=selected.bday||'';
+    document.getElementById('ed-nick').value=selected.nick||'';
     document.getElementById('ed-phone').value=selected.phone||'';
     document.getElementById('sc-view').style.display='none';
     document.getElementById('sc-edit-form').style.display='block';
@@ -362,13 +362,13 @@
     if(!kid||!parent){alert('Please fill in at least the child\u2019s and parent\u2019s name.');return;}
     selected.kid=kid;
     selected.parent=parent;
-    selected.bday=document.getElementById('ed-bday').value.trim();
+    selected.nick=document.getElementById('ed-nick').value.trim();
     selected.phone=document.getElementById('ed-phone').value.trim();
     document.getElementById('search').value=selected.kid;
     document.getElementById('sc-av').textContent=initials(selected.kid);
     document.getElementById('sc-name').textContent=selected.kid;
     document.getElementById('sc-parent').textContent='Parent: '+selected.parent;
-    document.getElementById('sc-bday').textContent=selected.bday||'\u2014';
+    document.getElementById('sc-nick').textContent=selected.nick||'\u2014';
     document.getElementById('sc-phone').textContent=selected.phone||'\u2014';
     exitEditMode();
     toastNote('Details updated \u2014 check the info below, then check in.');
@@ -396,7 +396,7 @@
     if(!selected)return;
     var btn=document.getElementById('btn-ci');
     btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> Checking in…';
-    var rec={id:String(Date.now()),kid:selected.kid,parent:selected.parent,email:selected.email||'',phone:selected.phone||'',bday:selected.bday||'',date:nowDate(),dropTime:nowTime(),pickTime:null};
+    var rec={id:String(Date.now()),kid:selected.kid,nick:selected.nick||'',parent:selected.parent,email:selected.email||'',phone:selected.phone||'',bday:'',date:nowDate(),dropTime:nowTime(),pickTime:null};
     apiCheckin(rec).then(function(){
       checkins.push(rec);
       document.getElementById('greeting').style.display='none';
@@ -447,7 +447,7 @@
   }
   function buildLabel(rec){
     lastRec=rec;
-    var first=rec.kid.split(' ')[0];
+    var first=(rec.nick&&rec.nick.trim())||rec.kid.split(' ')[0];
     document.getElementById('lp-name').textContent=first;
     document.getElementById('lp-name').style.fontSize=Math.min(40,fitNameSize(first)*2.8)+'px';
     document.getElementById('lp-name').style.letterSpacing='0.06em';
@@ -456,7 +456,7 @@
   }
   function labelPageHtml(recs){
     var body=recs.map(function(r){
-      var first=r.kid.split(' ')[0];
+      var first=(r.nick&&r.nick.trim())||r.kid.split(' ')[0];
       var sz=fitNameSize(first);
       return '<div class="pg"><div class="lab"><div class="tx"><div class="nm" style="font-size:'+sz+'mm">'+first+'</div>'
         +'<div class="mt">'+(r.phone||'')+'</div></div>'
