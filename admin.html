@@ -256,8 +256,8 @@
       <div class="note">These printers can't be reached by the browser directly. Easiest path: <b>Batch PNGs (ZIP)</b> gives you one ready-made image per label at the exact sticker size — unzip on your phone and print them from the NIIMBOT app like photos, no template needed. Or use <b>PNG</b> on a single label to share it straight to the app. The <b>Excel</b> option is only for the app's template binding feature (bind Name and Phone to text elements, and the "QR Link" column to a QR element).</div>
       <div class="toolbar" style="margin-bottom:12px">
         <select id="pq-size" onchange="saveLabelSize()" style="padding:11px 12px;border:3px solid var(--teal-light);border-radius:14px;font-family:'Fredoka';font-size:13px;font-weight:600;color:var(--teal-dark);background:#fff">
-          <option value="40x20">Label 40 × 20 mm (bracelet)</option>
-          <option value="50x30">Label 50 × 30 mm</option>
+          <option value="40x20">Label 40 × 20 mm</option>
+          <option value="50x30">Label 50 × 30 mm (bracelet)</option>
           <option value="40x30">Label 40 × 30 mm</option>
           <option value="62x29">Label 62 × 29 mm</option>
           <option value="30x20">Label 30 × 20 mm (small)</option>
@@ -302,7 +302,7 @@
 
 <script>
   /* ====== PASTE YOUR GOOGLE WEB APP URL BELOW (ends with /exec) ====== */
-  var API_URL = "https://script.google.com/macros/s/AKfycbwkQQETGOVHgM9iXtJwNJBfQmIND6gKhkmFbtO89H7lUCt80p11pekQtcR6v04StrBY/exec";
+  var API_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
   /* =================================================================== */
   var LIVE = API_URL.indexOf("http") === 0;
   /* == PASTE THE PARENT CHECK-IN PAGE URL BELOW (the one in your QR poster) == */
@@ -824,7 +824,7 @@
   /* ---------- NIIMBOT / APP-PRINTER SUPPORT ---------- */
   var LABEL_SIZES={'40x20':{w:40,h:20},'50x30':{w:50,h:30},'40x30':{w:40,h:30},'62x29':{w:62,h:29},'30x20':{w:30,h:20}};
   function getLabelSize(){
-    var v=localStorage.getItem('kc_labelsize')||'40x20';
+    var v=localStorage.getItem('kc_labelsize')||'50x30';
     if(!LABEL_SIZES[v])v='40x20';
     return LABEL_SIZES[v];
   }
@@ -834,7 +834,7 @@
   }
   function initLabelSize(){
     var sel=document.getElementById('pq-size');
-    if(sel)sel.value=localStorage.getItem('kc_labelsize')||'40x20';
+    if(sel)sel.value=localStorage.getItem('kc_labelsize')||'50x30';
   }
   function labelPng(rec,cb){
     var sz=getLabelSize();
@@ -1123,10 +1123,12 @@
             var targetW = Math.max(1, Math.round(L.w * truePxPerMm));
             var targetH = Math.max(1, Math.round(L.h * truePxPerMm));
             var headPx = meta && meta.printheadPixels;
-            if(headPx && targetH > headPx){
-              // safety clamp: never exceed the physical printhead width
-              targetW = Math.round(targetW * (headPx / targetH));
-              targetH = headPx;
+            if(headPx && targetW > headPx){
+              // The printhead spans the label's WIDTH as it feeds through, so
+              // canvas width (-> "rows" once encoded) is what must stay under
+              // the physical printhead pixel count \u2014 not height.
+              targetH = Math.round(targetH * (headPx / targetW));
+              targetW = headPx;
             }
             var scaled = document.createElement('canvas');
             scaled.width = targetW; scaled.height = targetH;
