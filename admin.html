@@ -139,10 +139,12 @@
     <button class="tab" onclick="showTab('email')" id="tab-email"><i class="ti ti-mail"></i> Email parents</button>
     <button class="tab" onclick="showTab('social')" id="tab-social"><i class="ti ti-speakerphone"></i> Social post</button>
     <button class="tab" onclick="showTab('print')" id="tab-print"><i class="ti ti-printer"></i> Print queue <span id="pq-badge" style="display:none;background:#fff;color:var(--orange);border-radius:99px;font-size:11px;padding:2px 8px;margin-left:2px"></span></button>
+    <button class="tab" onclick="showTab('archive')" id="tab-archive"><i class="ti ti-archive"></i> Archive</button>
   </div>
 
   <!-- RECORDS -->
   <div class="panel active" id="panel-records">
+    <div class="note" style="margin-bottom:14px"><i class="ti ti-calendar-event"></i> Showing <b id="rec-date-label">today</b>'s check-ins only. Previous days are saved automatically and never shown here \u2014 view them any time in the <b>Archive</b> tab.</div>
     <div class="stats">
       <div class="stat"><div class="stat-n" id="s-total">0</div><div class="stat-l">Total today</div></div>
       <div class="stat"><div class="stat-n" id="s-in">0</div><div class="stat-l">Still here</div></div>
@@ -152,6 +154,9 @@
       <div class="search-wrap"><i class="ti ti-search"></i><input type="text" id="rec-search" inputmode="search" placeholder="Search child or parent…" oninput="renderRecords()"/></div>
       <button class="btn" onclick="refresh()"><i class="ti ti-refresh"></i> Refresh</button>
       <button class="btn btn-primary" onclick="downloadExcel()"><i class="ti ti-file-download"></i> Excel</button>
+    </div>
+    <div class="toolbar" style="margin-top:0">
+      <button class="btn" onclick="archiveToday()" id="archive-btn"><i class="ti ti-archive"></i> Archive &amp; clear today's list</button>
     </div>
     <div class="rec-list" id="records-body"><div class="empty"><i class="ti ti-loader-2"></i>Loading…</div></div>
   </div>
@@ -264,6 +269,31 @@
       <div class="recip-head"><span class="recip-count" id="pq-count">0 labels pending</span>
         <button class="mini" onclick="refresh()">Refresh</button></div>
       <div class="rec-list" id="pq-list"></div>
+      <div class="sep"></div>
+      <div class="lbl"><i class="ti ti-bluetooth"></i> Direct Bluetooth printing <span style="font-size:11px;font-weight:700;color:var(--orange);background:#fdeee0;padding:2px 9px;border-radius:99px;margin-left:4px">BETA</span></div>
+      <div class="note">Prints straight to your B21 with no app in between, using an independent open-source printer driver (not made by Niimbot). <b>Chrome or Edge only</b> \u2014 on desktop or Android; this cannot work on an iPhone/iPad in any browser, Apple blocks it at the OS level. This is early-stage software, so if a print fails, the log below will show exactly what happened \u2014 send that to me and I'll fix it. <b>Reminder:</b> your printer still needs a genuine Niimbot label roll with its RFID tag intact, or every print will fail regardless of this feature.</div>
+      <div class="toolbar" style="margin-bottom:10px">
+        <button class="btn btn-primary" id="bt-connect-btn" onclick="connectNiimbotBluetooth()"><i class="ti ti-bluetooth"></i> Connect printer</button>
+        <button class="btn" onclick="printAllPendingBluetooth()"><i class="ti ti-printer"></i> Print all pending via Bluetooth</button>
+        <span style="font-weight:700;font-size:13px;color:#c0392b" id="bt-status">Not connected</span>
+      </div>
+      <div id="bt-log" style="font-family:monospace;font-size:12px;background:#1e2327;color:#c7d3d6;border-radius:12px;padding:12px;max-height:160px;overflow-y:auto;line-height:1.6"></div>
+    </div>
+  </div>
+
+  <!-- ARCHIVE -->
+  <div class="panel" id="panel-archive">
+    <div class="card">
+      <div class="lbl"><i class="ti ti-archive"></i> Past days</div>
+      <div class="note">Every day's records are saved here permanently once archived \u2014 either by tapping <b>Archive &amp; clear today's list</b> on the Records tab, or automatically overnight if you've set up the nightly trigger (see the note inside Code.gs).</div>
+      <div class="toolbar">
+        <select id="arc-date" onchange="renderArchiveDay()" style="flex:1;min-width:160px;padding:11px 12px;border:3px solid var(--teal-light);border-radius:14px;font-family:'Fredoka';font-size:13px;font-weight:600;color:var(--teal-dark);background:#fff">
+          <option value="">Loading dates\u2026</option>
+        </select>
+        <button class="btn" onclick="loadArchive()"><i class="ti ti-refresh"></i> Refresh</button>
+        <button class="btn btn-primary" onclick="downloadArchiveExcel()"><i class="ti ti-file-download"></i> Excel</button>
+      </div>
+      <div class="rec-list" id="archive-body"><div class="empty"><i class="ti ti-archive"></i>No archived days yet</div></div>
     </div>
   </div>
 
@@ -271,11 +301,11 @@
 
 <script>
   /* ====== PASTE YOUR GOOGLE WEB APP URL BELOW (ends with /exec) ====== */
-  var API_URL = "https://script.google.com/macros/s/AKfycbwkQQETGOVHgM9iXtJwNJBfQmIND6gKhkmFbtO89H7lUCt80p11pekQtcR6v04StrBY/exec";
+  var API_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
   /* =================================================================== */
   var LIVE = API_URL.indexOf("http") === 0;
   /* == PASTE THE PARENT CHECK-IN PAGE URL BELOW (the one in your QR poster) == */
-  var PARENT_URL = "https://ccf-nxtgen.vercel.app";
+  var PARENT_URL = "PASTE_PARENT_PAGE_URL_HERE";
   /* ========================================================================= */
   var TAG_LINKS = PARENT_URL.indexOf("http") === 0;
   // Auto-detect: if not configured and this admin page is hosted (e.g. yoursite.vercel.app/admin),
@@ -318,11 +348,12 @@
   }
 
   function showTab(t){
-    ['records','kids','email','social','print'].forEach(function(id){document.getElementById('panel-'+id).classList.toggle('active',id===t);document.getElementById('tab-'+id).classList.toggle('active',id===t);});
+    ['records','kids','email','social','print','archive'].forEach(function(id){document.getElementById('panel-'+id).classList.toggle('active',id===t);document.getElementById('tab-'+id).classList.toggle('active',id===t);});
     if(t==='records'||t==='kids')refresh();
     if(t==='email')renderRecipients();
     if(t==='social')drawPoster();
     if(t==='print')renderPrintQueue();
+    if(t==='archive')loadArchive();
   }
 
   function refresh(){
@@ -332,6 +363,7 @@
 
   /* ---------- RECORDS ---------- */
   function renderRecords(){
+    var lbl=document.getElementById('rec-date-label');if(lbl)lbl.textContent=nowDate();
     var q=(document.getElementById('rec-search').value||'').toLowerCase();
     var f=checkins.filter(function(c){return c.kid.toLowerCase().includes(q)||c.parent.toLowerCase().includes(q);});
     var out=checkins.filter(function(c){return c.pickTime;}).length;
@@ -439,6 +471,86 @@
     var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:20},{wch:20},{wch:28},{wch:16},{wch:14},{wch:12},{wch:14},{wch:14},{wch:14}];
     XLSX.utils.book_append_sheet(wb,ws,'Check-in Records');
     XLSX.writeFile(wb,'NXTGEN_Checkins_'+nowDate().replace(/\//g,'-')+'.xlsx');
+  }
+
+  /* ---------- ARCHIVE ---------- */
+  var archiveRows=[];
+  function archiveToday(){
+    if(!checkins.length){toast('Nothing to archive \u2014 no check-ins today yet',true);return;}
+    if(!confirm('Archive today\u2019s '+checkins.length+' record(s) and clear this list? This can\u2019t be undone, but everything is saved permanently in the Archive tab.'))return;
+    if(!LIVE){
+      var arc=JSON.parse(localStorage.getItem('kc_archive')||'[]');
+      arc=arc.concat(checkins);
+      localStorage.setItem('kc_archive',JSON.stringify(arc));
+      lsSaveChecks([]);checkins=[];renderRecords();renderPrintQueue();
+      toast('Archived (demo)');return;
+    }
+    var btn=document.getElementById('archive-btn');
+    if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> Archiving\u2026';}
+    apiPost({action:'archiveToday'}).then(function(res){
+      if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-archive"></i> Archive & clear today\'s list';}
+      if(res&&res.ok){toast('Archived '+res.archived+' record(s) \u2014 today\'s list is now clear');refresh();}
+      else{toast((res&&res.error)||'Could not archive',true);}
+    }).catch(function(){
+      if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-archive"></i> Archive & clear today\'s list';}
+      toast('Archiving failed \u2014 check connection',true);
+    });
+  }
+  function loadArchive(){
+    var sel=document.getElementById('arc-date');
+    var body=document.getElementById('archive-body');
+    if(!LIVE){
+      archiveRows=JSON.parse(localStorage.getItem('kc_archive')||'[]');
+      populateArchiveDates();return;
+    }
+    sel.innerHTML='<option value="">Loading\u2026</option>';
+    body.innerHTML='<div class="empty"><i class="ti ti-loader-2"></i>Loading\u2026</div>';
+    apiPost({action:'getArchive'}).then(function(res){
+      if(res&&res.ok){archiveRows=res.archive||[];populateArchiveDates();}
+      else{sel.innerHTML='<option value="">Couldn\'t load</option>';toast((res&&res.error)||'Could not load archive',true);}
+    }).catch(function(){sel.innerHTML='<option value="">Couldn\'t load</option>';toast('Could not reach the sheet',true);});
+  }
+  function populateArchiveDates(){
+    var sel=document.getElementById('arc-date');
+    if(!archiveRows.length){
+      sel.innerHTML='<option value="">No archived days yet</option>';
+      document.getElementById('archive-body').innerHTML='<div class="empty"><i class="ti ti-archive"></i>No archived days yet \u2014 use "Archive & clear today\'s list" on the Records tab after check-ins finish.</div>';
+      return;
+    }
+    var dates=Array.from(new Set(archiveRows.map(function(r){return r.date;})));
+    dates.sort(function(a,b){
+      function toKey(d){var p=d.split('/');return p[2]+p[1]+p[0];}
+      return toKey(b).localeCompare(toKey(a));
+    });
+    sel.innerHTML=dates.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');
+    renderArchiveDay();
+  }
+  function renderArchiveDay(){
+    var sel=document.getElementById('arc-date');
+    var d=sel.value;
+    var body=document.getElementById('archive-body');
+    var rows=archiveRows.filter(function(r){return r.date===d;});
+    if(!rows.length){body.innerHTML='<div class="empty"><i class="ti ti-archive"></i>No records for this day</div>';return;}
+    body.innerHTML=rows.map(function(c){
+      return '<div class="rec"><div class="rec-top"><div class="av">'+initials(c.kid)+'</div>'
+        +'<div class="rec-id"><div class="rec-name">'+c.kid+(c.nick?' <span style="font-weight:600;color:var(--teal-dark)">('+c.nick+')</span>':'')+'</div><div class="rec-parent">'+c.parent+'</div></div>'
+        +'<span class="pill '+(c.pickTime?'pill-out':'pill-in')+'">'+(c.pickTime?'<i class="ti ti-circle-check"></i> Out':'<i class="ti ti-clock"></i> Here')+'</span></div>'
+        +'<div class="rec-meta">'+(c.phone?'<span><i class="ti ti-phone"></i> '+c.phone+'</span>':'')
+        +'<span><i class="ti ti-login"></i> In '+c.dropTime+'</span>'
+        +(c.pickTime?'<span><i class="ti ti-logout"></i> Out '+c.pickTime+'</span>':'')+'</div></div>';
+    }).join('');
+  }
+  function downloadArchiveExcel(){
+    var sel=document.getElementById('arc-date');
+    var d=sel.value;
+    var rows=d?archiveRows.filter(function(r){return r.date===d;}):archiveRows;
+    if(!rows.length){toast('No archived records to download',true);return;}
+    var wb=XLSX.utils.book_new();
+    var out=[["Child's Name","Nick Name","Parent's Name","Parent's Email","Parent's Phone","Date","Drop-off Time","Pick-up Time","Status"]];
+    rows.forEach(function(c){out.push([c.kid,c.nick||'',c.parent,c.email,c.phone,c.date,c.dropTime,c.pickTime||'',c.pickTime?'Picked up':'Checked in']);});
+    var ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:20},{wch:14},{wch:20},{wch:28},{wch:16},{wch:12},{wch:14},{wch:14},{wch:14}];
+    XLSX.utils.book_append_sheet(wb,ws,'Archive');
+    XLSX.writeFile(wb,'NXTGEN_Archive_'+(d?d.replace(/\//g,'-'):'all')+'.xlsx');
   }
 
   /* ---------- EMAIL ---------- */
@@ -819,6 +931,138 @@
     }
     next();
   }
+  /* ---------- DIRECT BLUETOOTH PRINTING (BETA) ----------
+     Uses the independent open-source "niimbluelib" driver (not made or
+     endorsed by Niimbot) to talk to the B21 straight from the browser via
+     the Web Bluetooth API. Chrome/Edge on desktop or Android only \u2014
+     Web Bluetooth does not exist on iOS in any browser.
+     This library is in early/alpha development, so the exact print-submit
+     call below is a best-effort implementation \u2014 if it errors, the log
+     panel shows the raw error so it can be fixed quickly. The connect step
+     itself uses the library's documented, stable API and is solid. */
+  var NIIMBOT_LIB_URL = 'https://unpkg.com/@mmote/niimbluelib@0.0.1-alpha.24/dist/umd/niimbluelib.min.js';
+  var btClient = null;
+
+  function btLog(msg, isError){
+    var el=document.getElementById('bt-log');
+    if(!el)return;
+    var line=document.createElement('div');
+    line.style.color = isError ? '#ff8a80' : '#a8e6cf';
+    line.textContent = (isError?'\u2717 ':'\u2022 ') + msg;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function setBtStatus(connected){
+    var el=document.getElementById('bt-status');
+    if(!el)return;
+    el.textContent = connected ? 'Connected' : 'Not connected';
+    el.style.color = connected ? '#2e7d32' : '#c0392b';
+  }
+
+  function loadNiimbotLib(){
+    if(window.niimbluelib)return Promise.resolve();
+    return new Promise(function(resolve,reject){
+      var s=document.createElement('script');
+      s.src=NIIMBOT_LIB_URL;
+      s.onload=function(){resolve();};
+      s.onerror=function(){reject(new Error('Could not load the printer driver \u2014 check your internet connection.'));};
+      document.head.appendChild(s);
+    });
+  }
+
+  function connectNiimbotBluetooth(){
+    if(!navigator.bluetooth){
+      btLog('This browser does not support Web Bluetooth. Use Chrome or Edge on a computer or Android device.', true);
+      toast('Bluetooth printing needs Chrome or Edge (desktop/Android)',true);
+      return;
+    }
+    var btn=document.getElementById('bt-connect-btn');
+    if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> Connecting\u2026';}
+    btLog('Loading printer driver\u2026');
+    loadNiimbotLib().then(function(){
+      if(!btClient){
+        btClient = new niimbluelib.NiimbotBluetoothClient();
+        btClient.addEventListener('connect', function(){
+          setBtStatus(true);
+          btLog('Printer connected.');
+        });
+        btClient.addEventListener('disconnect', function(){
+          setBtStatus(false);
+          btLog('Printer disconnected.', true);
+        });
+        btClient.addEventListener('printprogress', function(e){
+          btLog('Printing\u2026 page '+((e.page||0)+1)+'/'+(e.pagesTotal||1)+' ('+(e.pagePrintProgress||0)+'%)');
+        });
+      }
+      btLog('Opening the Bluetooth device picker \u2014 choose your B21\u2026');
+      return btClient.connect();
+    }).then(function(){
+      setBtStatus(true);
+      if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-bluetooth"></i> Reconnect';}
+    }).catch(function(err){
+      setBtStatus(false);
+      if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-bluetooth"></i> Connect printer';}
+      btLog('Connection failed: '+(err&&err.message?err.message:err), true);
+    });
+  }
+
+  // Best-effort print submission \u2014 see note above the Bluetooth section.
+  // If this throws, the exact error is logged rather than failing silently.
+  function printOneBluetooth(rec){
+    return new Promise(function(resolve,reject){
+      labelPng(rec,function(cv){
+        (async function(){
+          try{
+            var PTV = niimbluelib.PrintTaskVersion;
+            var task = btClient.createPrintTask(
+              PTV ? (PTV.V4 || Object.values(PTV)[0]) : undefined,
+              { totalPages: 1, density: 3, labelType: 1, quantity: 1 }
+            );
+            if(!task) throw new Error('Printer model not recognised by the driver yet.');
+            var encoded = niimbluelib.ImageEncoder.encodeCanvas
+              ? niimbluelib.ImageEncoder.encodeCanvas(cv, 'left')
+              : cv;
+            await task.printInit();
+            await task.printPage(encoded, 1);
+            await task.printEnd();
+            resolve();
+          }catch(err){ reject(err); }
+        })();
+      });
+    });
+  }
+
+  function printAllPendingBluetooth(){
+    var pend=checkins.filter(function(c){return !c.printed;});
+    if(!pend.length){toast('No pending labels to print',true);return;}
+    if(!btClient||!btClient.isConnected||!btClient.isConnected()){
+      if(!btClient){btLog('Not connected yet \u2014 tap Connect printer first.',true);toast('Connect the printer first',true);return;}
+    }
+    btLog('Printing '+pend.length+' label(s)\u2026');
+    var i=0, done=[];
+    function next(){
+      if(i>=pend.length){
+        btLog('Finished: '+done.length+'/'+pend.length+' printed.');
+        if(done.length)markPrinted(done);
+        return;
+      }
+      var c=pend[i++];
+      var first=(c.nick&&c.nick.trim())||c.kid.split(' ')[0];
+      printOneBluetooth(c).then(function(){
+        btLog(first+' \u2014 printed.');
+        done.push(c.id);
+        next();
+      }).catch(function(err){
+        btLog(first+' \u2014 failed: '+(err&&err.message?err.message:err), true);
+        toast('Print failed \u2014 see the log for details',true);
+        if(done.length)markPrinted(done);
+        btLog('Stopped after '+done.length+'/'+pend.length+' \u2014 fix the error above, then try again (already-printed ones are marked done).', true);
+      });
+    }
+    next();
+  }
+
   function markAllPrinted(){
     var pend=checkins.filter(function(c){return !c.printed;});
     if(!pend.length){toast('Nothing pending',true);return;}
