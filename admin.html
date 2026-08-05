@@ -302,7 +302,7 @@
 
 <script>
   /* ====== PASTE YOUR GOOGLE WEB APP URL BELOW (ends with /exec) ====== */
-  var API_URL = "https://script.google.com/macros/s/AKfycbwkQQETGOVHgM9iXtJwNJBfQmIND6gKhkmFbtO89H7lUCt80p11pekQtcR6v04StrBY/exec";
+  var API_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
   /* =================================================================== */
   var LIVE = API_URL.indexOf("http") === 0;
   /* == PASTE THE PARENT CHECK-IN PAGE URL BELOW (the one in your QR poster) == */
@@ -1111,7 +1111,29 @@
             var printerInfo = btClient.getPrinterInfo();
             var meta = btClient.getModelMetadata ? btClient.getModelMetadata() : null;
             btLog('Model metadata: ' + JSON.stringify(meta));
-            btLog('Canvas size: ' + cv.width + ' x ' + cv.height + ' px');
+            btLog('Source canvas size: ' + cv.width + ' x ' + cv.height + ' px');
+
+            // The canvas from labelPng() is deliberately high-res (16px/mm) for
+            // crisp PNG/ZIP exports. For direct Bluetooth printing we must match
+            // the printer's REAL physical resolution (DPI) and its fixed printhead
+            // width in pixels, or the firmware rejects the bitmap (DataError).
+            var L = getLabelSize(); // {w,h} in mm
+            var dpi = (meta && meta.dpi) || 203;
+            var truePxPerMm = dpi / 25.4;
+            var targetW = Math.max(1, Math.round(L.w * truePxPerMm));
+            var targetH = Math.max(1, Math.round(L.h * truePxPerMm));
+            var headPx = meta && meta.printheadPixels;
+            if(headPx && targetH > headPx){
+              // safety clamp: never exceed the physical printhead width
+              targetW = Math.round(targetW * (headPx / targetH));
+              targetH = headPx;
+            }
+            var scaled = document.createElement('canvas');
+            scaled.width = targetW; scaled.height = targetH;
+            var sctx = scaled.getContext('2d');
+            sctx.fillStyle = '#ffffff'; sctx.fillRect(0,0,targetW,targetH);
+            sctx.drawImage(cv, 0, 0, targetW, targetH);
+            btLog('Scaled to printer resolution: ' + targetW + ' x ' + targetH + ' px ('+dpi+' dpi, printhead '+headPx+'px)');
 
             var abstraction = new niimbluelib.Abstraction(btClient);
             var task = new TaskClass(abstraction, {
@@ -1120,7 +1142,7 @@
               totalPages: 1
             });
 
-            var encoded = niimbluelib.ImageEncoder.encodeCanvas(cv);
+            var encoded = niimbluelib.ImageEncoder.encodeCanvas(scaled);
             btLog('Encoded image: rows=' + encoded.rows + ' cols=' + encoded.cols + ' keys=' + Object.keys(encoded).join(','));
 
             await task.printInit();
