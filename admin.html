@@ -1024,6 +1024,19 @@
         var methods = Object.getOwnPropertyNames(proto).filter(function(m){return m!=='constructor';}).sort();
         btLog('Client methods: ' + methods.join(', '));
 
+        // Walk the FULL prototype chain \u2014 inherited methods (like getPrintTaskType)
+        // live higher up and were missed above.
+        var chainMethods = [];
+        var p = Object.getPrototypeOf(btClient);
+        var depth = 0;
+        while(p && p !== Object.prototype && depth < 6){
+          chainMethods.push('[level '+depth+' = '+(p.constructor&&p.constructor.name||'?')+']: ' +
+            Object.getOwnPropertyNames(p).filter(function(m){return m!=='constructor';}).sort().join(', '));
+          p = Object.getPrototypeOf(p);
+          depth++;
+        }
+        btLog('Full inherited chain:\\n' + chainMethods.join('\\n'));
+
         if(typeof btClient.getPrintTaskType === 'function'){
           try{
             var t = btClient.getPrintTaskType();
@@ -1050,6 +1063,10 @@
         var tproto = niimbluelib.AbstractPrintTask.prototype;
         var tmethods = Object.getOwnPropertyNames(tproto).filter(function(m){return m!=='constructor';}).sort();
         btLog('AbstractPrintTask methods: ' + tmethods.join(', '));
+        btLog('AbstractPrintTask full source: ' + niimbluelib.AbstractPrintTask.toString().slice(0,600));
+      }
+      if(niimbluelib.Abstraction){
+        btLog('Abstraction source: ' + niimbluelib.Abstraction.toString().slice(0,400));
       }
 
       if(niimbluelib.B21V1PrintTask){
