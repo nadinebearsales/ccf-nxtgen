@@ -301,7 +301,7 @@
 
 <script>
   /* ====== PASTE YOUR GOOGLE WEB APP URL BELOW (ends with /exec) ====== */
-  var API_URL = "https://script.google.com/macros/s/AKfycbwkQQETGOVHgM9iXtJwNJBfQmIND6gKhkmFbtO89H7lUCt80p11pekQtcR6v04StrBY/exec";
+  var API_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
   /* =================================================================== */
   var LIVE = API_URL.indexOf("http") === 0;
   /* == PASTE THE PARENT CHECK-IN PAGE URL BELOW (the one in your QR poster) == */
@@ -986,15 +986,15 @@
     loadNiimbotLib().then(function(){
       if(!btClient){
         btClient = new niimbluelib.NiimbotBluetoothClient();
-        btClient.addEventListener('connect', function(){
+        btClient.on('connect', function(){
           setBtStatus(true);
           btLog('Printer connected.');
         });
-        btClient.addEventListener('disconnect', function(){
+        btClient.on('disconnect', function(){
           setBtStatus(false);
           btLog('Printer disconnected.', true);
         });
-        btClient.addEventListener('printprogress', function(e){
+        btClient.on('printprogress', function(e){
           btLog('Printing\u2026 page '+((e.page||0)+1)+'/'+(e.pagesTotal||1)+' ('+(e.pagePrintProgress||0)+'%)');
         });
       }
