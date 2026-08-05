@@ -278,6 +278,10 @@
         <button class="btn" onclick="inspectNiimbotDriver()"><i class="ti ti-bug"></i> Inspect driver (debug)</button>
         <span style="font-weight:700;font-size:13px;color:#c0392b" id="bt-status">Not connected</span>
       </div>
+      <div class="toolbar" style="margin-bottom:10px">
+        <label style="font-size:13px;font-weight:700;color:var(--teal-dark)">Force task type (testing):</label>
+        <input type="text" id="bt-force-task" placeholder="e.g. B1 \u2014 leave blank for auto" style="padding:8px 10px;border:2px solid var(--teal-light);border-radius:10px;font-size:13px;width:160px" oninput="window.NIIMBOT_FORCE_TASK=this.value.trim()||null"/>
+      </div>
       <div id="bt-log" style="font-family:monospace;font-size:12px;background:#1e2327;color:#c7d3d6;border-radius:12px;padding:12px;max-height:160px;overflow-y:auto;line-height:1.6"></div>
     </div>
   </div>
@@ -302,7 +306,7 @@
 
 <script>
   /* ====== PASTE YOUR GOOGLE WEB APP URL BELOW (ends with /exec) ====== */
-  var API_URL = "https://script.google.com/macros/s/AKfycbwkQQETGOVHgM9iXtJwNJBfQmIND6gKhkmFbtO89H7lUCt80p11pekQtcR6v04StrBY/exec";
+  var API_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
   /* =================================================================== */
   var LIVE = API_URL.indexOf("http") === 0;
   /* == PASTE THE PARENT CHECK-IN PAGE URL BELOW (the one in your QR poster) == */
@@ -1104,7 +1108,12 @@
       labelPng(rec,function(cv){
         (async function(){
           try{
-            var taskType = btClient.getPrintTaskType(); // e.g. "B21_V1"
+            // Auto-detected task type. Your exact model (B21_L2B) isn't on the
+            // library's tested-models list, and other B21 sub-variants are known
+            // to actually need the "B1" task instead of the auto-detected
+            // "B21_V1" \u2014 so we allow overriding it for testing.
+            var taskType = window.NIIMBOT_FORCE_TASK || btClient.getPrintTaskType();
+            btLog('Using print task: ' + taskType + (window.NIIMBOT_FORCE_TASK ? ' (forced override)' : ' (auto-detected)'));
             var TaskClass = (niimbluelib.printTasks && niimbluelib.printTasks[taskType]) || niimbluelib.B21V1PrintTask;
             if(!TaskClass) throw new Error('No print task class found for type '+taskType);
 
