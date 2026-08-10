@@ -314,6 +314,10 @@
         <input type="text" id="bt-force-task" placeholder="e.g. B1 \u2014 leave blank for auto" style="padding:8px 10px;border:2px solid var(--teal-light);border-radius:10px;font-size:13px;width:160px" oninput="window.NIIMBOT_FORCE_TASK=this.value.trim()||null"/>
       </div>
       <div id="bt-log" style="font-family:monospace;font-size:12px;background:#1e2327;color:#c7d3d6;border-radius:12px;padding:12px;max-height:160px;overflow-y:auto;line-height:1.6"></div>
+      <div class="sep"></div>
+      <div class="lbl"><i class="ti ti-history"></i> All labels today <span style="font-size:11px;font-weight:700;color:var(--teal-dark);background:var(--teal-light);padding:2px 9px;border-radius:99px;margin-left:4px" id="all-today-count">0</span></div>
+      <div class="note">Every check-in from today, printed or not. If one shows as printed but didn't actually come out of the printer, reprint it right here.</div>
+      <div class="rec-list" id="all-today-list"></div>
     </div>
   </div>
 
@@ -760,53 +764,6 @@
     var size=maxW/(Math.max((name||'').length,1)*factor);
     return Math.max(6,Math.min(16,size)).toFixed(1);
   }
-  function labelPageHtml(recs){
-    var L=getLabelSize();
-    var qrMm=Math.min(L.h-3, L.w*0.45).toFixed(1);
-    var textMm=L.w-qrMm-4.5;
-    var phoneMm=Math.max(2.2,Math.min(3,L.h*0.11)).toFixed(1);
-    var body=recs.map(function(r){
-      var first=(r.nick&&r.nick.trim())||r.kid.split(' ')[0];
-      var fs=Math.min(L.h*0.5, textMm/(Math.max(first.length,1)*0.55));
-      fs=Math.max(2.5,fs).toFixed(1);
-      return '<div class="pg"><div class="lab"><div class="tx"><div class="nm" style="font-size:'+fs+'mm">'+first+'</div>'
-        +'<div class="mt" style="font-size:'+phoneMm+'mm">'+(r.phone||'')+'</div></div>'
-        +'<img src="'+qrDataUrl(tagUrl(r),400)+'"/></div></div>';
-    }).join('');
-    // Real-measurement auto-fit: the sizes above are a starting estimate from
-    // character count, which can misjudge wide letters. This shrinks the actual
-    // rendered text (in the real browser, with real font metrics) until it fits
-    // its column, so a name never overlaps the QR code's space.
-    var fitScript = '<script>'
-      + 'document.querySelectorAll(".tx").forEach(function(tx){'
-      + '  ["nm","mt"].forEach(function(cls){'
-      + '    var el=tx.querySelector("."+cls); if(!el) return;'
-      + '    var maxW=tx.clientWidth, guard=0;'
-      + '    var mm=parseFloat(el.style.fontSize)||3;'
-      + '    while(el.scrollWidth>maxW && mm>1.8 && guard<60){ mm-=0.15; el.style.fontSize=mm.toFixed(2)+"mm"; guard++; }'
-      + '  });'
-      + '});'
-      + '<\/script>';
-    return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-      +'@page{size:'+L.w+'mm '+L.h+'mm;margin:0}*{margin:0;padding:0;box-sizing:border-box}'
-      +'.pg{width:'+L.w+'mm;height:'+L.h+'mm;page-break-after:always;display:flex}'
-      +'.lab{width:100%;display:flex;align-items:center;padding:1.5mm 1.5mm;gap:1.5mm;font-family:Arial,sans-serif}'
-      +'.tx{flex:1;min-width:0;max-width:'+textMm+'mm;overflow:hidden}.nm{font-weight:800;line-height:1;white-space:nowrap;overflow:hidden;color:#000;letter-spacing:0.06em}'
-      +'.mt{font-weight:700;color:#000;margin-top:1.2mm;letter-spacing:.2mm;white-space:nowrap;overflow:hidden}'
-      +'img{width:'+qrMm+'mm;height:'+qrMm+'mm;flex-shrink:0}'
-      +'</style></head><body>'+body+fitScript+'</body></html>';
-  }
-  function doPrint(recs, done){
-    if(!recs.length){if(done)done();return;}
-    var f=document.createElement('iframe');
-    f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-    document.body.appendChild(f);
-    f.contentDocument.open();f.contentDocument.write(labelPageHtml(recs));f.contentDocument.close();
-    setTimeout(function(){
-      try{f.contentWindow.focus();f.contentWindow.print();}catch(e){}
-      setTimeout(function(){f.remove();if(done)done();},2500);
-    },400);
-  }
   function markPrinted(ids){
     ids.forEach(function(id){
       var c=checkins.find(function(x){return String(x.id)===String(id);});
@@ -817,17 +774,31 @@
     if(!LIVE){lsSaveChecks(checkins);return;}
     apiPost({action:'markPrinted',ids:ids}).catch(function(){toast('Could not update printed status',true);});
   }
-  function printJobs(recs){
-    if(!recs.length){toast('Nothing to print',true);return;}
-    var ids=recs.map(function(r){return r.id;});
-    ids.forEach(function(id){printing[id]=true;});
-    renderPrintQueue();
-    doPrint(recs,function(){markPrinted(ids);toast('Printed '+recs.length+' label'+(recs.length>1?'s':''));});
-  }
-  function printAllPending(){printJobs(checkins.filter(function(c){return !c.printed;}));}
-  function printOne(id){
+  // "Print all pending" and auto-print both go through Bluetooth now \u2014 see
+  // printJobsBluetooth() further down, defined alongside the rest of the
+  // Bluetooth printing code.
+  function printAllPending(){ printAllPendingBluetooth(); }
+  function printSingleBluetooth(id){
     var c=checkins.find(function(x){return String(x.id)===String(id);});
-    if(c)printJobs([c]);
+    if(!c){toast('Label not found',true);return;}
+    var first=(c.nick&&c.nick.trim())||c.kid.split(' ')[0];
+    if(!btClient){
+      toast('Connect the printer first',true);
+      btLog('Tried to print '+first+' but the printer is not connected yet.', true);
+      return;
+    }
+    btLog('Printing '+first+'\u2026');
+    printing[c.id]=true;
+    printOneBluetooth(c).then(function(){
+      delete printing[c.id];
+      btLog(first+' \u2014 printed.');
+      markPrinted([c.id]);
+      toast(first+' printed!');
+    }).catch(function(err){
+      delete printing[c.id];
+      btLog(first+' \u2014 failed: '+(err&&err.message?err.message:err), true);
+      toast('Print failed \u2014 see the Bluetooth log for details',true);
+    });
   }
   function toggleAutoPrint(){
     autoPrint=!autoPrint;
@@ -846,7 +817,12 @@
   }
   function autoPrintTick(){
     var jobs=pendingJobs();
-    if(jobs.length)printJobs(jobs);
+    if(!jobs.length)return;
+    if(!btClient){
+      btLog('Auto-print is ON but the printer isn\u2019t connected \u2014 tap Connect printer to resume.', true);
+      return;
+    }
+    printJobsBluetooth(jobs, true);
   }
   function renderPrintQueue(){
     var pend=checkins.filter(function(c){return !c.printed;});
@@ -856,19 +832,38 @@
     if(cnt)cnt.textContent=pend.length+(pend.length===1?' label pending':' labels pending');
     var box=document.getElementById('pq-list');
     if(!box)return;
-    if(!pend.length){box.innerHTML='<div class="empty"><i class="ti ti-printer-off"></i>No labels waiting \u2014 all printed!</div>';updateApButton();return;}
+    if(!pend.length){box.innerHTML='<div class="empty"><i class="ti ti-printer-off"></i>No labels waiting \u2014 all printed!</div>';updateApButton();renderAllToday();return;}
     box.innerHTML=pend.map(function(c){
       var first=(c.nick&&c.nick.trim())||c.kid.split(' ')[0];
       return '<div class="rec"><div class="rec-top">'
         +'<div style="flex:1;min-width:0"><div class="rec-name">'+first+'</div><div class="rec-parent">'+c.kid+' \u00b7 in '+c.dropTime+'</div></div>'
         +'<img alt="QR" style="width:52px;height:52px;flex-shrink:0" src="'+qrDataUrl(tagUrl(c),104)+'"/></div>'
         +'<div class="rec-actions">'
-        +'<button class="ib pick" onclick="printOne(\''+c.id+'\')"><i class="ti ti-printer"></i> Print</button>'
+        +'<button class="ib pick" onclick="printSingleBluetooth(\''+c.id+'\')"><i class="ti ti-bluetooth"></i> Print</button>'
         +'<button class="ib" onclick="shareLabelPng(\''+c.id+'\')"><i class="ti ti-photo-share"></i> PNG</button>'
         +'<button class="ib" onclick="markPrinted([\''+c.id+'\'])"><i class="ti ti-check"></i> Mark done</button>'
         +'</div></div>';
     }).join('');
     updateApButton();
+    renderAllToday();
+  }
+  function renderAllToday(){
+    var box=document.getElementById('all-today-list');
+    var cnt=document.getElementById('all-today-count');
+    if(cnt)cnt.textContent=checkins.length;
+    if(!box)return;
+    if(!checkins.length){box.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>No check-ins yet today</div>';return;}
+    var sorted=checkins.slice().sort(function(a,b){return Number(b.id)-Number(a.id);});
+    box.innerHTML=sorted.map(function(c){
+      var first=(c.nick&&c.nick.trim())||c.kid.split(' ')[0];
+      var isPrinted=!!c.printed;
+      return '<div class="rec"><div class="rec-top">'
+        +'<div style="flex:1;min-width:0"><div class="rec-name">'+first+'</div><div class="rec-parent">'+c.kid+' \u00b7 in '+c.dropTime+'</div></div>'
+        +'<span class="pill '+(isPrinted?'pill-out':'pill-in')+'">'+(isPrinted?'<i class="ti ti-check"></i> Printed':'<i class="ti ti-clock"></i> Pending')+'</span></div>'
+        +'<div class="rec-actions">'
+        +'<button class="ib pick" onclick="printSingleBluetooth(\''+c.id+'\')"><i class="ti ti-bluetooth"></i> '+(isPrinted?'Reprint':'Print')+'</button>'
+        +'</div></div>';
+    }).join('');
   }
   /* ---------- NIIMBOT / APP-PRINTER SUPPORT ---------- */
   var LABEL_SIZES={'50x20':{w:50,h:20},'40x20':{w:40,h:20},'50x30':{w:50,h:30},'40x30':{w:40,h:30},'62x29':{w:62,h:29},'30x20':{w:30,h:20}};
@@ -1272,34 +1267,45 @@
     });
   }
 
-  function printAllPendingBluetooth(){
-    var pend=checkins.filter(function(c){return !c.printed;});
-    if(!pend.length){toast('No pending labels to print',true);return;}
-    if(!btClient||!btClient.isConnected||!btClient.isConnected()){
-      if(!btClient){btLog('Not connected yet \u2014 tap Connect printer first.',true);toast('Connect the printer first',true);return;}
+  // Shared by "Print all pending", auto-print, and anything else that wants
+  // to batch-print via Bluetooth. silent=true suppresses toasts (used by
+  // auto-print so it doesn't interrupt with a popup every ~12s).
+  function printJobsBluetooth(recs, silent){
+    if(!recs.length){ if(!silent) toast('No pending labels to print',true); return; }
+    if(!btClient){
+      btLog('Not connected yet \u2014 tap Connect printer first.',true);
+      if(!silent) toast('Connect the printer first',true);
+      return;
     }
-    btLog('Printing '+pend.length+' label(s)\u2026');
+    btLog('Printing '+recs.length+' label(s)\u2026');
     var i=0, done=[];
     function next(){
-      if(i>=pend.length){
-        btLog('Finished: '+done.length+'/'+pend.length+' printed.');
+      if(i>=recs.length){
+        btLog('Finished: '+done.length+'/'+recs.length+' printed.');
         if(done.length)markPrinted(done);
         return;
       }
-      var c=pend[i++];
+      var c=recs[i++];
       var first=(c.nick&&c.nick.trim())||c.kid.split(' ')[0];
+      printing[c.id]=true; // scoped to just this attempt, so a failure doesn't lock it out of future retries
       printOneBluetooth(c).then(function(){
+        delete printing[c.id];
         btLog(first+' \u2014 printed.');
         done.push(c.id);
         next();
       }).catch(function(err){
+        delete printing[c.id];
         btLog(first+' \u2014 failed: '+(err&&err.message?err.message:err), true);
-        toast('Print failed \u2014 see the log for details',true);
+        if(!silent) toast('Print failed \u2014 see the log for details',true);
         if(done.length)markPrinted(done);
-        btLog('Stopped after '+done.length+'/'+pend.length+' \u2014 fix the error above, then try again (already-printed ones are marked done).', true);
+        btLog('Stopped after '+done.length+'/'+recs.length+' \u2014 fix the error above, then try again (already-printed ones are marked done).', true);
       });
     }
     next();
+  }
+  function printAllPendingBluetooth(){
+    var pend=checkins.filter(function(c){return !c.printed;});
+    printJobsBluetooth(pend);
   }
 
   function markAllPrinted(){
