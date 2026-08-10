@@ -180,25 +180,12 @@
       <div class="success-title" id="s-title"></div>
       <div class="success-sub" id="s-sub">Welcome to NXT GEN today!</div>
       <div class="success-time" id="s-time"></div>
-      <div id="label-wrap" style="margin:0 auto 22px;max-width:300px">
-        <div style="font-size:13px;color:#9CC4CC;font-weight:700;margin-bottom:8px">Bracelet label</div>
-        <div id="label-preview" style="background:#fff;border:3px solid var(--teal-light);border-radius:14px;padding:12px;display:flex;align-items:center;gap:12px">
-          <div style="flex:1;text-align:left;min-width:0">
-            <div id="lp-name" style="font-family:'Fredoka';font-size:26px;font-weight:700;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-            <div id="lp-meta" style="font-size:12px;color:#000;font-weight:800"></div>
-          </div>
-          <img id="lp-qr" alt="QR" style="width:76px;height:76px;flex-shrink:0"/>
-        </div>
-        <button class="btn-again" onclick="printLabel()" style="margin-top:12px;width:100%;border-color:var(--orange);color:#A85618">Print label</button>
-        <div style="font-size:12px;color:#9CC4CC;font-weight:700;margin-top:8px">Also sent to the welcome desk printer</div>
-      </div>
       <button class="btn-again" onclick="resetForm()"><i class="ti ti-arrow-back-up"></i> Check in another</button>
     </div>
   </div>
   <div class="footer">NXT GEN Kids &middot; check-in<span id="reg-link-wrap" style="display:none"> &middot; <a id="reg-link" href="#" target="_blank" rel="noopener" style="color:var(--teal-dark);font-weight:800;text-decoration:underline">New here? Register</a></span></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   /* ====== PASTE YOUR GOOGLE WEB APP URL BELOW (ends with /exec) ====== */
   var API_URL = "https://script.google.com/macros/s/AKfycbwkQQETGOVHgM9iXtJwNJBfQmIND6gKhkmFbtO89H7lUCt80p11pekQtcR6v04StrBY/exec";
@@ -404,13 +391,11 @@
       document.getElementById('success-wrap').style.display='block';
       document.getElementById('s-title').textContent=selected.kid.split(' ')[0]+' is all set! \u2728';
       document.getElementById('s-time').textContent='Checked in at '+rec.dropTime+' \u00b7 '+rec.date;
-      buildLabel(rec);
     }).catch(function(){
       btn.disabled=false;btn.innerHTML='<i class="ti ti-hand-love-you"></i> Check me in!';
       alert('Sorry, that didn\u2019t save. Please check your connection and try again.');
     });
   }
-  var lastRec=null;
   function encTag(r){
     var o={k:r.kid,p:r.parent||'',c:r.phone||'',i:r.id,t:r.dropTime||'',d:r.date||''};
     var b=btoa(unescape(encodeURIComponent(JSON.stringify(o))));
@@ -422,62 +407,6 @@
       while(b.length%4)b+='=';
       return JSON.parse(decodeURIComponent(escape(atob(b))));
     }catch(e){return null;}
-  }
-  function tagUrl(r){
-    if(location.protocol==='file:')return qrText(r);
-    return location.origin+location.pathname+'?t='+r.id;
-  }
-  function qrText(r){
-    return 'NXT GEN KIDS'
-      +'\nChild: '+r.kid
-      +'\nParent: '+(r.parent||'-')
-      +'\nContact: '+(r.phone||'-')
-      +'\nID: '+r.id;
-  }
-  function qrDataUrl(text,size){
-    var d=document.createElement('div');
-    new QRCode(d,{text:text,width:size,height:size,correctLevel:QRCode.CorrectLevel.M});
-    var cv=d.querySelector('canvas');
-    return cv?cv.toDataURL('image/png'):(d.querySelector('img')||{}).src||'';
-  }
-  function fitNameSize(name){
-    var maxW=31, factor=0.55;
-    var size=maxW/(Math.max((name||'').length,1)*factor);
-    return Math.max(6,Math.min(16,size)).toFixed(1);
-  }
-  function buildLabel(rec){
-    lastRec=rec;
-    var first=(rec.nick&&rec.nick.trim())||rec.kid.split(' ')[0];
-    document.getElementById('lp-name').textContent=first;
-    document.getElementById('lp-name').style.fontSize=Math.min(40,fitNameSize(first)*2.8)+'px';
-    document.getElementById('lp-name').style.letterSpacing='0.06em';
-    document.getElementById('lp-meta').textContent=rec.phone||'';
-    document.getElementById('lp-qr').src=qrDataUrl(tagUrl(rec),152);
-  }
-  function labelPageHtml(recs){
-    var body=recs.map(function(r){
-      var first=(r.nick&&r.nick.trim())||r.kid.split(' ')[0];
-      var sz=fitNameSize(first);
-      return '<div class="pg"><div class="lab"><div class="tx"><div class="nm" style="font-size:'+sz+'mm">'+first+'</div>'
-        +'<div class="mt">'+(r.phone||'')+'</div></div>'
-        +'<img src="'+qrDataUrl(tagUrl(r),300)+'"/></div></div>';
-    }).join('');
-    return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-      +'@page{size:62mm 29mm;margin:0}*{margin:0;padding:0;box-sizing:border-box}'
-      +'.pg{width:62mm;height:29mm;page-break-after:always;display:flex}'
-      +'.lab{width:100%;display:flex;align-items:center;padding:1.5mm 2.5mm;gap:1.5mm;font-family:Arial,sans-serif}'
-      +'.tx{flex:1;min-width:0}.nm{font-weight:800;line-height:1;white-space:nowrap;overflow:hidden;color:#000;letter-spacing:0.06em}'
-      +'.mt{font-size:3mm;font-weight:700;color:#000;margin-top:1.8mm;letter-spacing:.3mm}'
-      +'img{width:25mm;height:25mm;flex-shrink:0}'
-      +'</style></head><body>'+body+'</body></html>';
-  }
-  function printLabel(){
-    if(!lastRec)return;
-    var f=document.createElement('iframe');
-    f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-    document.body.appendChild(f);
-    f.contentDocument.open();f.contentDocument.write(labelPageHtml([lastRec]));f.contentDocument.close();
-    setTimeout(function(){try{f.contentWindow.focus();f.contentWindow.print();}catch(e){}setTimeout(function(){f.remove();},2000);},350);
   }
   function resetForm(){
     selected=null;
