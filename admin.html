@@ -1235,12 +1235,36 @@
             btLog('Encoded image: rows=' + encoded.rows + ' cols=' + encoded.cols + ' keys=' + Object.keys(encoded).join(','));
 
             await task.printInit();
-            await task.printPage(encoded, 1);
+
+            // The printer sometimes doesn't send its final "done" acknowledgment
+            // (response 0xD3) in a way this library version reliably catches \u2014
+            // but we've confirmed the label physically prints regardless. Treat
+            // that specific timeout as a warning, not a failure, so the batch
+            // keeps going instead of stopping after the first label.
+            function isBenignD3Timeout(err){
+              var msg = err && err.message ? err.message : String(err);
+              return /waited for d3/i.test(msg);
+            }
+            try{
+              await task.printPage(encoded, 1);
+            }catch(errPage){
+              if(isBenignD3Timeout(errPage)){
+                btLog('printPage: no D3 ack received, but label should have printed \u2014 continuing.', true);
+              } else { throw errPage; }
+            }
+
             if(typeof task.waitForFinished === 'function'){
               try{ await task.waitForFinished(); }
               catch(e2){ btLog('waitForFinished warning: '+(e2&&e2.message?e2.message:e2), true); }
             }
-            await task.printEnd();
+
+            try{
+              await task.printEnd();
+            }catch(errEnd){
+              if(isBenignD3Timeout(errEnd)){
+                btLog('printEnd: no D3 ack received \u2014 continuing.', true);
+              } else { throw errEnd; }
+            }
             resolve();
           }catch(err){ reject(err); }
         })();
