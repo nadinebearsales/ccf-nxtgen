@@ -764,11 +764,15 @@
     var size=maxW/(Math.max((name||'').length,1)*factor);
     return Math.max(6,Math.min(16,size)).toFixed(1);
   }
+  var recentlyMarked = {}; // id -> timestamp; guards against the server not having
+                            // caught up to a "mark printed" write by the next poll,
+                            // which would otherwise cause a duplicate print.
   function markPrinted(ids){
     ids.forEach(function(id){
       var c=checkins.find(function(x){return String(x.id)===String(id);});
       if(c)c.printed='Yes';
       delete printing[id];
+      recentlyMarked[id]=Date.now();
     });
     renderPrintQueue();
     if(!LIVE){lsSaveChecks(checkins);return;}
@@ -888,7 +892,10 @@
     var ctx=cv.getContext('2d');
     ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
     var pad=1.5*PX;
-    var qrSide=Math.min(H-2*pad, W*0.45);
+    var topMargin=2*PX; // keeps content off the physical top edge of the sticker
+    var usableH=H-topMargin;
+    var contentCenterY=topMargin+usableH/2;
+    var qrSide=Math.min(usableH-pad, W*0.45);
     var textW=W-qrSide-3*pad; // available width for the text column \u2014 name/phone must never cross into this
     var first=(rec.nick&&rec.nick.trim())||rec.kid.split(' ')[0];
     ctx.fillStyle='#000000';
@@ -910,7 +917,7 @@
     fs=Math.max(fs,7);
     while(measuredWidth(first,fs,'800')>textW && fs>7){ fs-=0.5; }
     ctx.font='800 '+Math.floor(fs)+'px Arial';
-    var nameY=H*0.5;
+    var nameY=contentCenterY;
     var ls=fs*0.06,x=pad;
     for(var i=0;i<first.length;i++){
       ctx.fillText(first[i],x,nameY);
@@ -926,7 +933,7 @@
 
     var img=new Image();
     img.onload=function(){
-      ctx.drawImage(img,W-qrSide-pad,(H-qrSide)/2,qrSide,qrSide);
+      ctx.drawImage(img,W-qrSide-pad,topMargin+(usableH-qrSide)/2,qrSide,qrSide);
       cb(cv);
     };
     img.onerror=function(){cb(cv);};
@@ -1253,13 +1260,20 @@
               catch(e2){ btLog('waitForFinished warning: '+(e2&&e2.message?e2.message:e2), true); }
             }
 
+            var missedAck=false;
             try{
               await task.printEnd();
             }catch(errEnd){
               if(isBenignD3Timeout(errEnd)){
                 btLog('printEnd: no D3 ack received \u2014 continuing.', true);
+                missedAck=true;
               } else { throw errEnd; }
             }
+            // Give the printer a moment to physically finish its own end-of-job
+            // wrap-up (advancing to the next label's start position) before we
+            // consider this job done and potentially send the next one. Longer
+            // pause when we know we didn't wait for its real completion signal.
+            await new Promise(function(res){ setTimeout(res, missedAck?1800:400); });
             resolve();
           }catch(err){ reject(err); }
         })();
@@ -1319,7 +1333,15 @@
   setInterval(function(){
     if(!LIVE){if(autoPrint)autoPrintTick();return;}
     apiGet().then(function(d){
-      regs=d.registrations;checkins=d.checkins;
+      regs=d.registrations;
+      var fresh=d.checkins||[];
+      var now=Date.now();
+      Object.keys(recentlyMarked).forEach(function(id){
+        if(now-recentlyMarked[id]>45000){ delete recentlyMarked[id]; return; } // server should have long since caught up by 45s
+        var item=fresh.find(function(c){return String(c.id)===String(id);});
+        if(item && !item.printed) item.printed='Yes'; // trust our own recent write over a possibly-stale server read
+      });
+      checkins=fresh;
       renderPrintQueue();
       var active=document.getElementById('panel-records').classList.contains('active');
       if(active)renderRecords();
